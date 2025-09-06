@@ -70,35 +70,62 @@ st.markdown("---")
 # Charts + Insights
 # --------------------
 colorful_palette = px.colors.qualitative.Set3
+template_mode = "plotly_white"  # default template
 
-# 1️⃣ Gender Distribution
+# 1️⃣ Gender Distribution with tie handling
+df_gender_counts = df_filtered.groupby(gender_col).size().reset_index(name='Count')
+df_gender_counts['Percentage'] = df_gender_counts['Count'] / len(df_filtered) * 100
+df_gender_counts = df_gender_counts.sort_values(by='Count', ascending=False)
+
 fig_gender = px.pie(
-    df_filtered,
+    df_gender_counts,
     names=gender_col,
+    values='Count',
     title="Gender Distribution of Patients",
-    color_discrete_sequence=colorful_palette
+    color_discrete_sequence=colorful_palette,
+    hover_data={'Count': True, 'Percentage': ':.1f'},
+    template=template_mode
 )
 st.plotly_chart(fig_gender, use_container_width=True)
-gender_counts = df_filtered[gender_col].value_counts()
-st.markdown(f"**Insight:** Most patients are **{gender_counts.idxmax()}** with {gender_counts.max()} patients.")
+
+# Handle tie in insight
+max_count = df_gender_counts['Count'].max()
+most_genders = df_gender_counts[df_gender_counts['Count'] == max_count][gender_col].tolist()
+
+if len(most_genders) == 1:
+    st.markdown(
+        f"**Insight:** Most patients are **{most_genders[0]}** "
+        f"with {max_count} patients "
+        f"({round(max_count/len(df_filtered)*100,1)}%)."
+    )
+else:
+    genders_str = ", ".join(most_genders)
+    st.markdown(
+        f"**Insight:** Patient count is equal for: **{genders_str}** "
+        f"with {max_count} patients each ({round(max_count/len(df_filtered)*100,1)}%)."
+    )
 
 # 2️⃣ Patients by Medical Condition
 condition_counts_df = df_filtered[condition_col].value_counts().reset_index()
 condition_counts_df.columns = ['Condition', 'Count']
+
 fig_condition = px.bar(
     condition_counts_df,
     x='Condition',
     y='Count',
     title="Patients by Medical Condition",
-    color_discrete_sequence=colorful_palette
+    color_discrete_sequence=colorful_palette,
+    template=template_mode
 )
 st.plotly_chart(fig_condition, use_container_width=True)
-st.markdown(f"**Insight:** The most common condition is **{condition_counts_df['Condition'][0]}** with {condition_counts_df['Count'][0]} cases.")
+st.markdown(
+    f"**Insight:** The most common condition is **{condition_counts_df['Condition'][0]}** "
+    f"with {condition_counts_df['Count'][0]} cases."
+)
 
 # --------------------
-# New Charts (Replacing old 3)
+# New Charts (Funnel, Sunburst, Donut)
 # --------------------
-# ✅ Funnel Chart – Patient Journey
 patient_flow = {
     "Stage": ["Admitted", "Under Treatment", "Discharged"],
     "Count": [len(df_filtered), int(len(df_filtered)*0.8), int(len(df_filtered)*0.75)]
@@ -111,21 +138,21 @@ fig_funnel = px.funnel(
     x="Count",
     title="Patient Journey Funnel",
     color="Stage",
-    color_discrete_sequence=colorful_palette
+    color_discrete_sequence=colorful_palette,
+    template=template_mode
 )
 st.plotly_chart(fig_funnel, use_container_width=True)
 
-# ✅ Sunburst Chart – Insurance Type by Department (if Department column exists)
 if "Department" in df_filtered.columns:
     fig_sunburst = px.sunburst(
         df_filtered,
         path=["Department", insurance_col],
         title="Insurance Distribution Across Departments",
-        color_discrete_sequence=colorful_palette
+        color_discrete_sequence=colorful_palette,
+        template=template_mode
     )
     st.plotly_chart(fig_sunburst, use_container_width=True)
 
-# ✅ Donut Chart – Payment Method Distribution (if PaymentMethod column exists)
 if "PaymentMethod" in df_filtered.columns:
     payment_counts = df_filtered["PaymentMethod"].value_counts().reset_index()
     payment_counts.columns = ["Payment Method", "Count"]
@@ -136,7 +163,8 @@ if "PaymentMethod" in df_filtered.columns:
         values="Count",
         hole=0.5,
         title="Distribution of Payment Methods",
-        color_discrete_sequence=colorful_palette
+        color_discrete_sequence=colorful_palette,
+        template=template_mode
     )
     st.plotly_chart(fig_donut, use_container_width=True)
 
@@ -145,8 +173,6 @@ if "PaymentMethod" in df_filtered.columns:
 # --------------------
 st.subheader("📊 Extra Analytics")
 
-# ✅ Line Chart – Admissions Over Time
-df_filtered[admission_col] = pd.to_datetime(df_filtered[admission_col])
 admissions_over_time = df_filtered.groupby(df_filtered[admission_col].dt.to_period("M")).size().reset_index(name="Count")
 admissions_over_time[admission_col] = admissions_over_time[admission_col].astype(str)
 
@@ -156,24 +182,24 @@ fig_line = px.line(
     y="Count",
     markers=True,
     title="Admissions Over Time",
-    color_discrete_sequence=colorful_palette
+    color_discrete_sequence=colorful_palette,
+    template=template_mode
 )
 st.plotly_chart(fig_line, use_container_width=True)
 
-# ✅ Area Chart – Billing Trend Over Time
-if admission_col in df_filtered.columns:
-    billing_trend = df_filtered.groupby(df_filtered[admission_col].dt.to_period("M"))[billing_col].sum().reset_index()
-    billing_trend[admission_col] = billing_trend[admission_col].dt.to_timestamp()
+billing_trend = df_filtered.groupby(df_filtered[admission_col].dt.to_period("M"))[billing_col].sum().reset_index()
+billing_trend[admission_col] = billing_trend[admission_col].dt.to_timestamp()
 
-    fig_area_billing = px.area(
-        billing_trend,
-        x=admission_col,
-        y=billing_col,
-        title="Total Billing Amount Over Time",
-        labels={admission_col: "Admission Month", billing_col: "Total Billing"},
-        color_discrete_sequence=colorful_palette
-    )
-    st.plotly_chart(fig_area_billing, use_container_width=True)
+fig_area_billing = px.area(
+    billing_trend,
+    x=admission_col,
+    y=billing_col,
+    title="Total Billing Amount Over Time",
+    labels={admission_col: "Admission Month", billing_col: "Total Billing"},
+    color_discrete_sequence=colorful_palette,
+    template=template_mode
+)
+st.plotly_chart(fig_area_billing, use_container_width=True)
 
 # --------------------
 # Data Preview
